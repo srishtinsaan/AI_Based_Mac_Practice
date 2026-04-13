@@ -1,7 +1,7 @@
 mac_fill,flood_pressure,port_traffic,vlan_info,entry_age,new_mac_rate
-0,Low,Low,Balanced,Fresh,Low
-10,Low,Low,Balanced,Fresh,High
-80,Low,High,Imbalanced,Aging,Medium
-85,Medium,High,Imbalanced,Aging,Low
-100,High,High,Crowded,Stale,High
-95,High,High,Crowded,Stale,High
+empty,low,low,vlan_1_devices_2,fresh,low
+empty,low,low,vlan_2_devices_10,fresh,medium
+almost_full,medium,medium,vlan_1_devices_20,aging,medium
+almost_full,high,high,vlan_2_devices_50,aging,high
+full,high,high,vlan_1_devices_100,stale,high
+full,high,high,vlan_2_devices_150,stale,high

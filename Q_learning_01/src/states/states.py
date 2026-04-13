@@ -1,18 +1,20 @@
-def get_state(mac_fill, flood, traffic, vlan, age, mac_rate):
-    """
-    Summarizes all 6 network metrics into 3 discrete states .
-    """
-    # S3: Critical [cite: 145-158]
-    # Triggered by high pressure, full table, OR suspicious new MAC rates.
-    if mac_fill >= 100 or flood == "High" or age == "Stale" or mac_rate == "High":
-        return 2 
+import pandas as pd
+
+class StateEncoder:
+    def __init__(self, data_path):
+        df = pd.read_csv(data_path)
+        self.unique_scenarios = df.drop_duplicates().reset_index(drop=True)
         
-    # S2: Moderate [cite: 132-144]
-    # Triggered by nearing capacity or aging entries.
-    elif mac_fill >= 80 or age == "Aging" or traffic == "High":
-        return 1
-        
-    # S1: Normal [cite: 119-131]
-    # Default stable state.
-    else:
-        return 0
+    def get_state_index(self, row):
+        match = self.unique_scenarios[
+            (self.unique_scenarios['mac_fill'] == row['mac_fill']) &
+            (self.unique_scenarios['flood_pressure'] == row['flood_pressure']) &
+            (self.unique_scenarios['port_traffic'] == row['port_traffic']) &
+            (self.unique_scenarios['vlan_info'] == row['vlan_info']) &
+            (self.unique_scenarios['entry_age'] == row['entry_age']) &
+            (self.unique_scenarios['new_mac_rate'] == row['new_mac_rate'])
+        ]
+        return int(match.index[0]) if not match.empty else 0
+
+    def total_states(self):
+        return len(self.unique_scenarios)
