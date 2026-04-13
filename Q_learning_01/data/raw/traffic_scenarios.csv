@@ -1,0 +1,7 @@
+mac_fill,flood_pressure,entry_age
+0,Low,Fresh
+10,Low,Fresh
+80,Low,Aging
+85,Medium,Aging
+100,High,Stale
+95,High,Stale

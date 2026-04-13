@@ -1,0 +1,14 @@
+class MockRedis:
+    """Simulates Redis functionality using a Python dictionary."""
+    def __init__(self):
+        self.storage = {}
+
+    def set(self, key, value):
+        self.storage[key] = value
+        # print(f"[Mock Redis] Set {key} = {value}")
+
+    def get(self, key):
+        return self.storage.get(key)
+
+# Create a global instance to be used across the project
+redis_client = MockRedis()
