@@ -1,7 +1,7 @@
-mac_fill,flood_pressure,entry_age
-0,Low,Fresh
-10,Low,Fresh
-80,Low,Aging
-85,Medium,Aging
-100,High,Stale
-95,High,Stale
+mac_fill,flood_pressure,port_traffic,vlan_info,entry_age,new_mac_rate
+0,Low,Low,Balanced,Fresh,Low
+10,Low,Low,Balanced,Fresh,High
+80,Low,High,Imbalanced,Aging,Medium
+85,Medium,High,Imbalanced,Aging,Low
+100,High,High,Crowded,Stale,High
+95,High,High,Crowded,Stale,High
