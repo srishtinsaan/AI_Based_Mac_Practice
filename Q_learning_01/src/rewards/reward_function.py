@@ -1,19 +1,17 @@
 def get_reward(action, fill, pressure, age, rate):
-    """
-    Maps network states and actions to specific project outcomes.
-    """
+    
     rewards_map = {
-        "correct_delivery": 1.0,         # Success: Learning when empty
-        "flooding_avoided": 0.8,         # Success: Blocking during attack
-        "preventive_removal": 0.3,       # Success: Maintenance
-        "necessary_flooding": -0.1,      # Neutral: Default fallback
-        "unnecessary_flooding": -1.0,    # Failure: Blocking good traffic
-        "wrong_port_stale": -0.5,        # Failure: Bad maintenance
-        "early_removal": -0.3,           # Failure: Evicting fresh entries
-        "table_overflow": -0.7           # Failure: Learning when full
+        "correct_delivery": 1.0,         
+        "flooding_avoided": 0.8,         
+        "preventive_removal": 0.3,       
+        "necessary_flooding": -0.1,      
+        "unnecessary_flooding": -1.0,    
+        "wrong_port_stale": -0.5,        
+        "early_removal": -0.3,           
+        "table_overflow": -0.7           
     }
 
-    outcome = "necessary_flooding" # Default fallback
+    outcome = "necessary_flooding" # default
 
     # ---------------- LEARN (Action 0) ----------------
     if action == 0:

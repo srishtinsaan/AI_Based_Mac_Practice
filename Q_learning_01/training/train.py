@@ -17,8 +17,9 @@ def run_training(data_path):
             total_ep_reward += reward
         
         agent.decay_epsilon()
-        # This saves the total reward for each episode to be plotted later
+
         rewards_history.append(total_ep_reward) 
         
-    # CRITICAL: You must return all THREE variables here
     return agent, env.encoder, rewards_history
+
+
