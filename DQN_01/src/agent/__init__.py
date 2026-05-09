@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import random
 import copy
-from src.network import DQNetwork
+from src.topology import DQNetwork
 from src.utils import ReplayBuffer, config
 
 class DQNAgent:
