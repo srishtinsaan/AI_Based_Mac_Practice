@@ -134,6 +134,14 @@ def test(model_path='results/models/best_model.pth'):
             # purely greedy — no exploration
             q_values = networks.get_q_values(state)
             action   = int(np.argmax(q_values))
+            print(f"    Q-Values → "
+                f"LEARN:{q_values[0]:+.3f} | "
+                f"EVICT:{q_values[1]:+.3f} | "
+                f"FLOOD:{q_values[2]:+.3f} | "
+                f"BLOCK:{q_values[3]:+.3f} | "
+                f"UNBLOCK:{q_values[4]:+.3f} | "
+                f"INC_AGE:{q_values[5]:+.3f} | "
+                f"DEC_AGE:{q_values[6]:+.3f}")
 
             next_state, reward, done, info = env.step(action)
 

@@ -1,8 +1,20 @@
 # src/training/train.py
 
+import os
+import sys
 import torch
 import numpy as np
-import os
+
+# ─────────────────────────────────────────
+# ABSOLUTE PATHS
+# ─────────────────────────────────────────
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+MODELS_DIR = os.path.join(BASE_DIR, 'results', 'models')
+LOGS_DIR   = os.path.join(BASE_DIR, 'results', 'logs')
+
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(LOGS_DIR,   exist_ok=True)
+
 from src.config import (
     GAMMA,
     BATCH_SIZE,
@@ -13,10 +25,38 @@ from src.config import (
     EPSILON_DECAY,
     TARGET_UPDATE_N
 )
-from src.actions          import get_action_name, NUM_ACTIONS
+from src.actions             import get_action_name, NUM_ACTIONS
 from src.agent.replay_buffer import ReplayBuffer
 from src.training.target_update import TargetUpdater
-from src.rewards          import episode_summary
+from src.rewards             import episode_summary
+
+
+# ─────────────────────────────────────────
+# LOGGER
+# terminal → only episode summary lines
+# log file → everything
+# ─────────────────────────────────────────
+class Logger:
+    def __init__(self, log_path):
+        self.terminal = sys.stdout
+        self.log = open(log_path, 'w', encoding='utf-8')
+
+    def write(self, message):
+        # everything goes to log file
+        self.log.write(message)
+        self.log.flush()
+
+        # only episode summary line goes to terminal
+        if 'Episode' in message and '/' in message:
+            self.terminal.write(message)
+            self.terminal.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        self.log.close()
 
 
 class Trainer:
@@ -24,16 +64,9 @@ class Trainer:
     Main training loop for DQN.
     Connects environment, agent, replay buffer,
     networks, and target updater together.
-    Runs episodes, collects transitions,
-    trains prediction network, logs results.
     """
 
     def __init__(self, env, networks):
-        """
-        Parameters:
-            env      : SwitchEnvironment instance
-            networks : DQNNetworks instance
-        """
         self.env            = env
         self.networks       = networks
         self.replay_buffer  = ReplayBuffer()
@@ -43,37 +76,19 @@ class Trainer:
         self.epsilon        = EPSILON_START
 
         # ── tracking ─────────────────────────
-        self.total_steps    = 0       # across all episodes
-        self.training_steps = 0      # number of times network trained
-        self.episode_rewards= []     # total reward per episode
-        self.episode_losses = []     # avg loss per episode
+        self.total_steps    = 0
+        self.training_steps = 0
+        self.episode_rewards= []
+        self.episode_losses = []
         self.best_reward    = float('-inf')
-
-        # ── results folder ───────────────────
-        os.makedirs('results/models', exist_ok=True)
-        os.makedirs('results/logs',   exist_ok=True)
 
     # ─────────────────────────────────────────
     # SELECT ACTION — epsilon greedy
     # ─────────────────────────────────────────
     def select_action(self, state):
-        """
-        Epsilon-greedy action selection.
-
-        With probability epsilon  → random action (explore)
-        With probability 1-epsilon → greedy action (exploit)
-
-        Parameters:
-            state : numpy array (3,)
-
-        Returns:
-            action : int (0-6)
-        """
         if np.random.random() < self.epsilon:
-            # explore — random action
             return np.random.randint(0, NUM_ACTIONS)
         else:
-            # exploit — best action from prediction network
             q_values = self.networks.get_q_values(state)
             return int(np.argmax(q_values))
 
@@ -81,76 +96,47 @@ class Trainer:
     # TRAIN STEP — one mini batch update
     # ─────────────────────────────────────────
     def train_step(self):
-        """
-        One complete training step:
-        1. Sample 64 transitions from replay buffer
-        2. Calculate y_i using target network
-        3. Calculate predicted Q using prediction network
-        4. Compute MSE loss
-        5. Backpropagation
-        6. SGD weight update
-        7. Check target network update
-
-        Returns:
-            loss : float
-        """
         # ── sample mini batch ────────────────
         states, actions, rewards, next_states, dones = \
             self.replay_buffer.sample(BATCH_SIZE)
 
         # ── convert to tensors ───────────────
-        device = self.networks.device
+        device        = self.networks.device
+        states_t      = torch.FloatTensor(states).to(device)
+        actions_t     = torch.LongTensor(actions).to(device)
+        rewards_t     = torch.FloatTensor(rewards).to(device)
+        next_states_t = torch.FloatTensor(next_states).to(device)
+        dones_t       = torch.FloatTensor(dones).to(device)
 
-        states_t      = torch.FloatTensor(states).to(device)       # (64, 3)
-        actions_t     = torch.LongTensor(actions).to(device)       # (64,)
-        rewards_t     = torch.FloatTensor(rewards).to(device)      # (64,)
-        next_states_t = torch.FloatTensor(next_states).to(device)  # (64, 3)
-        dones_t       = torch.FloatTensor(dones).to(device)        # (64,)
-
-        # ── get predicted Q values ───────────
-        # prediction network forward pass
-        # only Q-value of action actually taken
+        # ── predicted Q — prediction network ─
         q_predicted = self.networks.get_predicted_q(
-            states_t,
-            actions_t
-        )  # (64, 1)
+            states_t, actions_t
+        )  # (batch, 1)
 
-        # ── calculate y_i (target) ───────────
-        # target network forward pass on next states
+        # ── target Q — target network ────────
         max_q_next = self.networks.get_target_q(
             next_states_t
-        )  # (64, 1)
+        )  # (batch, 1)
 
-        # Bellman equation:
-        # y_i = reward + gamma * max Q(s', a'; theta-)
-        # if done → y_i = reward only (no future)
-        # (1 - dones_t) zeroes out future Q when done=True
+        # ── bellman equation ─────────────────
         y_i = rewards_t.unsqueeze(1) + \
               GAMMA * max_q_next * (1 - dones_t.unsqueeze(1))
-        # y_i shape: (64, 1)
 
-        # ── compute loss ─────────────────────
-        # MSE between target and prediction
-        # Loss = (1/64) * sum((y_i - Q_predicted)^2)
+        # ── loss ─────────────────────────────
         loss = self.networks.loss_fn(q_predicted, y_i.detach())
-        # .detach() stops gradient flowing through y_i
-        # gradient only flows through q_predicted (prediction network)
-        # target network never receives gradients
 
         # ── backpropagation ──────────────────
-        self.networks.optimizer.zero_grad()  # clear previous gradients
-        loss.backward()                      # compute gradients
+        self.networks.optimizer.zero_grad()
+        loss.backward()
 
         # ── gradient clipping ────────────────
-        # prevents exploding gradients
-        # clips gradient norm to max value of 1.0
         torch.nn.utils.clip_grad_norm_(
             self.networks.prediction_network.parameters(),
             max_norm=1.0
         )
 
-        # ── SGD weight update ────────────────
-        self.networks.optimizer.step()       # update all weights
+        # ── weight update ────────────────────
+        self.networks.optimizer.step()
 
         # ── target network check ─────────────
         self.training_steps += 1
@@ -166,28 +152,14 @@ class Trainer:
     # RUN ONE EPISODE
     # ─────────────────────────────────────────
     def run_episode(self, episode_num):
-        """
-        Runs one complete episode.
-        Collects transitions, trains network.
-
-        Parameters:
-            episode_num : int
-
-        Returns:
-            episode_reward : float
-            episode_loss   : float
-            steps          : int
-        """
-        # ── reset environment ────────────────
-        state = self.env.reset()
-
+        state          = self.env.reset()
         episode_reward = 0.0
         episode_losses = []
         done           = False
         step           = 0
 
         while not done and step < MAX_STEPS:
-            step            += 1
+            step             += 1
             self.total_steps += 1
 
             # ── select action ────────────────
@@ -198,11 +170,7 @@ class Trainer:
 
             # ── store transition ─────────────
             self.replay_buffer.store(
-                state,
-                action,
-                reward,
-                next_state,
-                done
+                state, action, reward, next_state, done
             )
 
             # ── train if buffer ready ────────
@@ -210,32 +178,35 @@ class Trainer:
                 loss = self.train_step()
                 episode_losses.append(loss)
 
-            # ── log step ─────────────────────
+            # ── log every 50 steps ───────────
             if step % 50 == 0:
+                q_values = self.networks.get_q_values(state)
                 print(f"  Ep {episode_num:4d} | "
-                      f"Step {step:4d} | "
-                      f"Action: {info['action_name']:<16} | "
-                      f"Outcome: {info['outcome']:<24} | "
-                      f"Reward: {reward:+.3f} | "
-                      f"Situation: {info['situation']:<15} | "
-                      f"ε: {self.epsilon:.3f}")
+                    f"Step {step:4d} | "
+                    f"Action: {info['action_name']:<16} | "
+                    f"Outcome: {info['outcome']:<24} | "
+                    f"Reward: {reward:+.3f} | "
+                    f"Situation: {info['situation']:<15} | "
+                    f"ε: {self.epsilon:.3f}")
+                print(f"    Q-Values → "
+                    f"LEARN:{q_values[0]:+.3f} | "
+                    f"EVICT:{q_values[1]:+.3f} | "
+                    f"FLOOD:{q_values[2]:+.3f} | "
+                    f"BLOCK:{q_values[3]:+.3f} | "
+                    f"UNBLOCK:{q_values[4]:+.3f} | "
+                    f"INC_AGE:{q_values[5]:+.3f} | "
+                    f"DEC_AGE:{q_values[6]:+.3f}")
 
             episode_reward += reward
             state           = next_state
 
-        # ── average loss this episode ────────
         avg_loss = np.mean(episode_losses) if episode_losses else 0.0
-
         return episode_reward, avg_loss, step
 
     # ─────────────────────────────────────────
     # DECAY EPSILON
     # ─────────────────────────────────────────
     def decay_epsilon(self):
-        """
-        Reduces epsilon after each episode.
-        Agent explores less as training progresses.
-        """
         self.epsilon = max(
             EPSILON_END,
             self.epsilon * EPSILON_DECAY
@@ -245,32 +216,34 @@ class Trainer:
     # SAVE BEST MODEL
     # ─────────────────────────────────────────
     def save_best(self, episode_reward, episode_num):
-        """
-        Saves model if this episode achieved best reward so far.
-        """
         if episode_reward > self.best_reward:
             self.best_reward = episode_reward
-            self.networks.save('results/models/best_model.pth')
+            self.networks.save(
+                os.path.join(MODELS_DIR, 'best_model.pth')
+            )
             print(f"  ★ New best reward: {self.best_reward:.3f} "
                   f"at episode {episode_num}")
 
     # ─────────────────────────────────────────
-    # TRAIN — main training loop
+    # TRAIN — main loop
     # ─────────────────────────────────────────
     def train(self):
-        """
-        Main training loop.
-        Runs MAX_EPISODES episodes.
-        Logs results, saves best model.
-        """
+
+        # ── setup logger ─────────────────────
+        log_path   = os.path.join(LOGS_DIR, 'training_log.txt')
+        logger     = Logger(log_path)
+        sys.stdout = logger
+
         print("\n════════════════════════════════════════")
         print("          DQN TRAINING STARTED          ")
         print("════════════════════════════════════════")
         self.networks.print_architecture()
 
-        # ── log file ─────────────────────────
-        log_file = open('results/logs/training_log.txt', 'w')
-        log_file.write("episode,reward,avg_loss,steps,epsilon\n")
+        # ── CSV log ──────────────────────────
+        csv_path = os.path.join(LOGS_DIR, 'training_csv.csv')
+        csv_file = open(csv_path, 'w')
+        csv_file.write("episode,reward,avg_loss,steps,epsilon\n")
+        csv_file.flush()
 
         for episode in range(1, MAX_EPISODES + 1):
 
@@ -281,15 +254,16 @@ class Trainer:
             # ── decay epsilon ────────────────
             self.decay_epsilon()
 
-            # ── track results ────────────────
+            # ── track ────────────────────────
             self.episode_rewards.append(episode_reward)
             self.episode_losses.append(avg_loss)
 
-            # ── save best model ──────────────
+            # ── save best ────────────────────
             self.save_best(episode_reward, episode)
 
             # ── episode summary ──────────────
             stats = self.env.get_episode_stats()
+
             print(f"\nEpisode {episode:4d}/{MAX_EPISODES} | "
                   f"Reward: {episode_reward:+8.3f} | "
                   f"Avg Loss: {avg_loss:.5f} | "
@@ -303,25 +277,30 @@ class Trainer:
                 stats['outcome_log']
             )
 
-            # ── write to log file ────────────
-            log_file.write(
+            # ── write CSV ────────────────────
+            csv_file.write(
                 f"{episode},"
                 f"{episode_reward:.4f},"
                 f"{avg_loss:.6f},"
                 f"{steps},"
                 f"{self.epsilon:.4f}\n"
             )
-            log_file.flush()
+            csv_file.flush()
 
-            # ── periodic checkpoint ──────────
+            # ── checkpoint every 100 ─────────
             if episode % 100 == 0:
-                path = f'results/models/checkpoint_ep{episode}.pth'
+                path = os.path.join(
+                    MODELS_DIR,
+                    f'checkpoint_ep{episode}.pth'
+                )
                 self.networks.save(path)
                 self._print_progress(episode)
 
         # ── training complete ─────────────────
-        log_file.close()
-        self.networks.save('results/models/final_model.pth')
+        csv_file.close()
+        self.networks.save(
+            os.path.join(MODELS_DIR, 'final_model.pth')
+        )
 
         print("\n════════════════════════════════════════")
         print("         DQN TRAINING COMPLETE          ")
@@ -331,18 +310,23 @@ class Trainer:
         print(f"  Training Steps  : {self.training_steps:,}")
         print(f"  Best Reward     : {self.best_reward:.3f}")
         print(f"  Final Epsilon   : {self.epsilon:.3f}")
-        print(f"  Models saved to : results/models/")
-        print(f"  Logs saved to   : results/logs/")
+        print(f"  Models saved to : {MODELS_DIR}")
+        print(f"  Logs saved to   : {LOGS_DIR}")
         print("════════════════════════════════════════\n")
 
+        # ── restore terminal ──────────────────
+        sys.stdout = logger.terminal
+        logger.close()
+
+        print("\nTraining complete.")
+        print(f"Logs → {log_path}")
+        print(f"CSV  → {csv_path}")
+        print(f"Models → {MODELS_DIR}")
+
     # ─────────────────────────────────────────
-    # PRINT PROGRESS — every 100 episodes
+    # PRINT PROGRESS
     # ─────────────────────────────────────────
     def _print_progress(self, episode):
-        """
-        Prints rolling average reward every 100 episodes.
-        Shows training trend.
-        """
         last_100 = self.episode_rewards[-100:]
         avg      = np.mean(last_100)
         best     = np.max(last_100)
