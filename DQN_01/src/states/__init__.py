@@ -1,4 +1,3 @@
-# src/states/__init__.py
 
 import numpy as np
 from src.config import (
@@ -7,18 +6,14 @@ from src.config import (
     MAX_AGING_TIMER
 )
 
-# ─────────────────────────────────────────
-# STATE NAMES (for logging and debugging)
-# ─────────────────────────────────────────
+
 STATE_NAMES = [
     'mac_table_entries',
     'flood_pressure',
     'entry_age'
 ]
 
-# ─────────────────────────────────────────
-# NORMALIZE SINGLE STATE VECTOR
-# ─────────────────────────────────────────
+
 def normalize_state(raw_mac_entries, raw_flood_rate, raw_avg_age):
     """
     Takes raw values directly from switch environment.

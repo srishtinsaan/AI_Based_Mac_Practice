@@ -1,8 +1,3 @@
-# src/actions/__init__.py
-
-# ─────────────────────────────────────────
-# ACTION CONSTANTS
-# ─────────────────────────────────────────
 LEARN_MAC        = 0
 EVICT_ENTRY      = 1
 FLOOD            = 2

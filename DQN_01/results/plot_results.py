@@ -1,6 +1,3 @@
-# plot_results.py
-# run this after training: python plot_results.py
-
 import numpy as np
 import matplotlib.pyplot as plt
 import csv

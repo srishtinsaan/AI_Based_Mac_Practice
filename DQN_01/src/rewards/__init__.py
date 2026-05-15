@@ -1,5 +1,3 @@
-# src/rewards/__init__.py
-
 from src.config import (
     REWARD_CORRECT_DELIVERY,
     REWARD_FLOODING_AVOIDED,

@@ -1,13 +1,9 @@
-# src/training/train.py
-
 import os
 import sys
 import torch
 import numpy as np
 
-# ─────────────────────────────────────────
 # ABSOLUTE PATHS
-# ─────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODELS_DIR = os.path.join(BASE_DIR, 'results', 'models')
 LOGS_DIR   = os.path.join(BASE_DIR, 'results', 'logs')

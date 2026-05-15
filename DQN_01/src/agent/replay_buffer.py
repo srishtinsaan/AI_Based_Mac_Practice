@@ -1,5 +1,3 @@
-# src/agent/replay_buffer.py
-
 import numpy as np
 import random
 from src.config import BUFFER_CAPACITY, BATCH_SIZE, MIN_BUFFER_SIZE

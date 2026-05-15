@@ -1,5 +1,3 @@
-# src/training/target_update.py
-
 from src.config import TARGET_UPDATE_N
 
 
